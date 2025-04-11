@@ -1,4 +1,4 @@
-# ========== 合并后的完整工作流（使用 needs 代替 workflow_run） ==========
+# ========== 合并后的完整工作流（通过 needs 传递版本号） ==========
 # 文件路径: .github/workflows/full-release.yml
 name: Full Release - Version Bump → PR → Auto-merge → Delete Branch
 
@@ -7,16 +7,12 @@ on:
     branches:
       - main
 
-  pull_request:
-    types: [closed]
-    branches:
-      - main
-
 jobs:
-
   # ========== Job A: 创建版本 PR ==========
   create-pr:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.clean }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,13 +30,12 @@ jobs:
           jq --arg version "${{ steps.version.outputs.clean }}" '.version = $version' package.json > tmp.json && mv tmp.json package.json
 
       - name: Create Pull Request
-        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: bump version to v${{ steps.version.outputs.clean }}"
           branch: "release/auto-bump-v${{ steps.version.outputs.clean }}"
-          title: "Release: ${{ steps.version.outputs.clean }}"
+          title: "Release: v${{ steps.version.outputs.clean }}"
           body: "This PR updates the version from `${{ steps.version.outputs.original }}` to `${{ steps.version.outputs.clean }}`"
           base: main
 
@@ -52,54 +47,43 @@ jobs:
       - name: Install GitHub CLI
         run: sudo apt-get install -y gh
 
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Fetch PR number
-        id: findpr
-        run: |
-          PR_NUMBER=$(gh pr list --state open --json number,title --jq ".[] | select(.title | test(\"Release: V[0-9]+\\\\.[0-9]+\\\\.[0-9]+\")) | .number")
-          echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
-
       - name: Auto approve PR
-        if: ${{ steps.findpr.outputs.pr != '' }}
-        run: gh pr review ${{ steps.findpr.outputs.pr }} --approve
-        env:
-          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+        run: |
+          VERSION=${{ needs.create-pr.outputs.version }}
+          PR_NUMBER=$(gh pr list --state open --head release/auto-bump-v$VERSION --json number --jq '.[0].number')
+          echo "PR number: $PR_NUMBER"
+          gh pr review "$PR_NUMBER" --approve
 
       - name: Enable Auto-merge
-        if: ${{ steps.findpr.outputs.pr != '' }}
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          pull-request-number: ${{ steps.findpr.outputs.pr }}
-          merge-method: squash
-          token: ${{ secrets.GH_BOT_TOKEN }}
+        run: |
+          VERSION=${{ needs.create-pr.outputs.version }}
+          PR_NUMBER=$(gh pr list --state open --head release/auto-bump-v$VERSION --json number --jq '.[0].number')
+          gh pr merge "$PR_NUMBER" --auto --squash
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
 
-  # ========== Job C: 合并成功后删除源分支 ==========
+  # ========== Job C: 删除已合并分支 ==========
   delete-branch:
-    needs: approve-and-merge
+    needs: [create-pr, approve-and-merge]
     runs-on: ubuntu-latest
     steps:
       - name: Install GitHub CLI
         run: sudo apt-get install -y gh
 
-      - name: Fetch PR and check merge status
-        id: pr
+      - name: Delete merged PR source branch
         run: |
-          PR_NUMBER=$(gh pr list --state merged --json number,title,headRefName --jq '.[] | select(.title | test("Release: V[0-9]+\\.[0-9]+\\.[0-9]+")) | .number')
-          BRANCH=$(gh pr view $PR_NUMBER --json headRefName -q '.headRefName')
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+          VERSION=${{ needs.create-pr.outputs.version }}
+          BRANCH="release/auto-bump-v$VERSION"
+          echo "Deleting merged branch: $BRANCH"
 
-      - name: Delete merged PR branch
-        if: ${{ steps.pr.outputs.branch != '' }}
-        run: |
-          echo "Deleting merged PR source branch: ${{ steps.pr.outputs.branch }}"
-          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
-          git push origin --delete "${{ steps.pr.outputs.branch }}"
+          # 检查是否已经 merged
+          PR_NUMBER=$(gh pr list --state merged --head "$BRANCH" --json number --jq '.[0].number')
+
+          if [ "$PR_NUMBER" != "" ]; then
+            git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
+            git push origin --delete "$BRANCH"
+          else
+            echo "PR not merged yet, skipping delete."
+          fi
         env:
           GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
