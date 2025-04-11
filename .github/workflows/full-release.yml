@@ -40,7 +40,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: bump version to v${{ steps.version.outputs.clean }}"
           branch: "release/auto-bump-v${{ steps.version.outputs.clean }}"
-          title: "Release: v${{ steps.version.outputs.clean }}"
+          title: "Release: ${{ steps.version.outputs.clean }}"
           body: "This PR updates the version from `${{ steps.version.outputs.original }}` to `${{ steps.version.outputs.clean }}`"
           base: main
 
@@ -58,7 +58,7 @@ jobs:
       - name: Fetch PR number
         id: findpr
         run: |
-          PR_NUMBER=$(gh pr list --state open --json number,title --jq ".[] | select(.title | test(\"Release: v[0-9]+\\\\.[0-9]+\\\\.[0-9]+\")) | .number")
+          PR_NUMBER=$(gh pr list --state open --json number,title --jq ".[] | select(.title | test(\"Release: V[0-9]+\\\\.[0-9]+\\\\.[0-9]+\")) | .number")
           echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
@@ -79,17 +79,27 @@ jobs:
 
   # ========== Job C: 合并成功后删除源分支 ==========
   delete-branch:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    needs: approve-and-merge
     runs-on: ubuntu-latest
     steps:
       - name: Install GitHub CLI
         run: sudo apt-get install -y gh
 
-      - name: Delete merged PR source branch
+      - name: Fetch PR and check merge status
+        id: pr
         run: |
-          BRANCH="${{ github.event.pull_request.head.ref }}"
-          echo "Deleting merged PR source branch: $BRANCH"
+          PR_NUMBER=$(gh pr list --state merged --json number,title,headRefName --jq '.[] | select(.title | test("Release: V[0-9]+\\.[0-9]+\\.[0-9]+")) | .number')
+          BRANCH=$(gh pr view $PR_NUMBER --json headRefName -q '.headRefName')
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+
+      - name: Delete merged PR branch
+        if: ${{ steps.pr.outputs.branch != '' }}
+        run: |
+          echo "Deleting merged PR source branch: ${{ steps.pr.outputs.branch }}"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
-          git push origin --delete "$BRANCH"
+          git push origin --delete "${{ steps.pr.outputs.branch }}"
         env:
           GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
