@@ -21,19 +21,36 @@ jobs:
       - name: Fetch PR number
         id: findpr
         run: |
-          PR_NUMBER=$(gh pr list --state open --json number,title --jq ".[] | select(.title | test(\"Release: v[0-9]+\\\\.[0-9]+\\\\.[0-9]+\")) | .number")
+          PR_NUMBER=$(gh pr list --state open --json number,title --jq ".[] | select(.title | test(\"Release: V[0-9]+\\\\.[0-9]+\\\\.[0-9]+\")) | .number")
+          echo "Found PR: $PR_NUMBER"
           echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
 
       - name: Auto approve PR
+        if: ${{ steps.findpr.outputs.pr != '' }}
         run: gh pr review ${{ steps.findpr.outputs.pr }} --approve
         env:
           GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
 
       - name: Enable Auto-merge
+        if: ${{ steps.findpr.outputs.pr != '' }}
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
           pull-request-number: ${{ steps.findpr.outputs.pr }}
           merge-method: squash
           token: ${{ secrets.GH_BOT_TOKEN }}
+
+      - name: Delete merged PR branch
+        if: ${{ steps.findpr.outputs.pr != '' }}
+        run: |
+          BRANCH=$(gh pr view ${{ steps.findpr.outputs.pr }} --json headRefName -q .headRefName)
+          MERGED=$(gh pr view ${{ steps.findpr.outputs.pr }} --json merged -q .merged)
+          if [ "$MERGED" = "true" ]; then
+            echo "Deleting merged branch: $BRANCH"
+            git push origin --delete "$BRANCH"
+          else
+            echo "PR not merged yet, skipping branch deletion."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
