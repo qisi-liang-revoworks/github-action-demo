@@ -11,6 +11,9 @@ jobs:
   # ========== Job A: 创建版本 PR ==========
   create-pr:
     runs-on: ubuntu-latest
+    if: |
+    startsWith(github.event.head_commit.message, 'Merge pull request') &&
+    contains(github.event.head_commit.message, 'from dev')
     outputs:
       version: ${{ steps.version.outputs.clean }}
     steps:
