@@ -35,7 +35,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: bump version to v${{ steps.version.outputs.clean }}"
           branch: "release/auto-bump-v${{ steps.version.outputs.clean }}"
-          title: "Release: v${{ steps.version.outputs.clean }}"
+          title: "Release: ${{ steps.version.outputs.clean }}"
           body: "This PR updates the version from `${{ steps.version.outputs.original }}` to `${{ steps.version.outputs.clean }}`"
           base: main
 
@@ -70,7 +70,8 @@ jobs:
       - name: Install GitHub CLI
         run: sudo apt-get install -y gh
 
-      - name: Delete merged PR source branch
+      - name: Fetch PR and check merge status
+        id: pr
         run: |
           VERSION=${{ needs.create-pr.outputs.version }}
           BRANCH="release/auto-bump-v$VERSION"
