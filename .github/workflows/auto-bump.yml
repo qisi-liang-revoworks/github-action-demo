@@ -35,6 +35,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: bump version to v${{ steps.version.outputs.clean }}"
           branch: "release/auto-bump-v${{ steps.version.outputs.clean }}"
-          title: "Release: v${{ steps.version.outputs.clean }}"
+          title: "Release: ${{ steps.version.outputs.clean }}"
           body: "This PR updates the version from `${{ steps.version.outputs.original }}` to `${{ steps.version.outputs.clean }}`"
           base: main
