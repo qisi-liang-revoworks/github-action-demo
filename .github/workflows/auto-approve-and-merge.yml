@@ -1,0 +1,39 @@
+name: Auto approve and merge PR
+
+on:
+  workflow_run:
+    workflows: ["Bump version and create PR"]
+    types:
+      - completed
+
+jobs:
+  approve-and-merge:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch PR number
+        id: findpr
+        run: |
+          PR_NUMBER=$(gh pr list --state open --json number,title --jq ".[] | select(.title | test(\"Release: v1.0.0\")) | .number")
+          echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+
+      - name: Auto approve PR
+        run: gh pr review ${{ steps.findpr.outputs.pr }} --approve
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+
+      - name: Enable Auto-merge
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          pull-request-number: ${{ steps.findpr.outputs.pr }}
+          merge-method: squash
+          token: ${{ secrets.GH_BOT_TOKEN }}
