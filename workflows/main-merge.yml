@@ -1,0 +1,26 @@
+name: Bypass Protected Branch and Push
+on:
+  push:
+    branches:
+      - dev  # 假设从 dev 自动推送到 main
+
+jobs:
+  bypass-protected-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 假设这里有生成某些文件
+      - name: Modify something
+        run: echo "auto update" >> update.txt
+
+      - name: Commit and Push to Protected Branch
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout main
+          git add .
+          git commit -m "Auto update by GitHub Action"
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git main
