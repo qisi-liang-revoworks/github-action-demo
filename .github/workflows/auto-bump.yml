@@ -3,7 +3,7 @@ name: Auto Bump Version and Create PR
 on:
   push:
     branches:
-      - main  # 当 main 被 dev 合并后触发
+      - main  # 当 dev 合并到 main 后触发
 
 jobs:
   bump-and-pr:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 模拟修改一个文件，比如版本号（你可以改成 package.json、pom.xml 等）
+      # 模拟修改一个文件，比如版本号
       - name: Bump version
         run: |
           echo "v1.0.0" > version.txt
@@ -30,10 +30,17 @@ jobs:
           body: "This PR bumps the version to v1.0.0 for production release."
           base: main
 
-      # 自动启用 PR 自动合并（需要保护分支允许 auto-merge）
-      - name: Enable Auto-merge
-        uses: peter-evans/enable-pull-request-automerge@v3
+      # 使用 PAT 自动审批 PR（满足至少一名 reviewer 审核）
+      - name: Auto approve PR
         if: ${{ steps.cpr.outputs.pull-request-number }}
+        uses: hmarr/auto-approve-action@v3
+        with:
+          github-token: ${{ secrets.GH_BOT_TOKEN }}
+
+      # 启用自动合并
+      - name: Enable Auto-merge
+        if: ${{ steps.cpr.outputs.pull-request-number }}
+        uses: peter-evans/enable-pull-request-automerge@v3
         with:
           pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
           merge-method: squash
