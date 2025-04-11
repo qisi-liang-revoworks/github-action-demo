@@ -14,13 +14,24 @@ jobs:
       - name: Modify something
         run: echo "auto update" >> update.txt
 
+      - name: Check if GH_BOT_TOKEN is present
+        run: |
+          if [ -z "${{ secrets.GH_BOT_TOKEN }}" ]; then
+            echo "❌ Secret GH_BOT_TOKEN is NOT set"
+            exit 1
+          else
+            echo "✅ Secret GH_BOT_TOKEN is set"
+          fi
+
       - name: Commit and Push to Protected Branch
         env:
           GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main:main
           git checkout main
           git add .
           git commit -m "Auto update by GitHub Action"
+          echo GH_TOKEN
           git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git main
