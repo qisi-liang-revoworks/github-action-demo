@@ -24,5 +24,5 @@ jobs:
           git checkout main
           git add .
           git commit -m "Auto update by GitHub Action"
-          echo "${GH_TOKEN}" | git credential approve
+          echo GH_TOKEN
           git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git main
