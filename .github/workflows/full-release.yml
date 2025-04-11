@@ -1,102 +1,95 @@
----
-  # ========== 合并后的完整工作流 ==========
-  # 文件路径: .github/workflows/full-release.yml
-  name: Full Release - Version Bump → PR → Auto-merge → Delete Branch  
-  on:
-    push:
-      branches:
-        - main
-  
-    workflow_run:
-      workflows: ["Full Release - Version Bump → PR → Auto-merge → Delete Branch"]
-      types:
-        - completed
-  
-    pull_request:
-      types: [closed]
-      branches:
-        - main
-  
-  jobs:
-  
-    # ========== Job A: 创建版本 PR ==========
-    create-pr:
-      if: github.event_name == 'push'
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-  
-        - name: Extract and clean version
-          id: version
-          run: |
-            VERSION=$(jq -r '.version' package.json)
-            CLEAN_VERSION=$(echo "$VERSION" | sed 's/-.*//')
-            echo "original=$VERSION" >> $GITHUB_OUTPUT
-            echo "clean=$CLEAN_VERSION" >> $GITHUB_OUTPUT
-  
-        - name: Update version in package.json
-          run: |
-            jq --arg version "${{ steps.version.outputs.clean }}" '.version = $version' package.json > tmp.json && mv tmp.json package.json
-  
-        - name: Create Pull Request
-          id: cpr
-          uses: peter-evans/create-pull-request@v6
-          with:
-            token: ${{ secrets.GITHUB_TOKEN }}
-            commit-message: "chore: bump version to v${{ steps.version.outputs.clean }}"
-            branch: "release/auto-bump-v${{ steps.version.outputs.clean }}"
-            title: "Release: v${{ steps.version.outputs.clean }}"
-            body: "This PR updates the version from `${{ steps.version.outputs.original }}` to `${{ steps.version.outputs.clean }}`"
-            base: main
-  
-    # ========== Job B: 审批 + Auto-merge ==========
-    approve-and-merge:
-      if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
-      runs-on: ubuntu-latest
-      steps:
-        - name: Install GitHub CLI
-          run: sudo apt-get install -y gh
-  
-        - name: Checkout repo
-          uses: actions/checkout@v4
-  
-        - name: Fetch PR number
-          id: findpr
-          run: |
-            PR_NUMBER=$(gh pr list --state open --json number,title --jq ".[] | select(.title | test(\"Release: v[0-9]+\\\\.[0-9]+\\\\.[0-9]+\")) | .number")
-            echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
-          env:
-            GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
-  
-        - name: Auto approve PR
-          if: ${{ steps.findpr.outputs.pr != '' }}
-          run: gh pr review ${{ steps.findpr.outputs.pr }} --approve
-          env:
-            GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
-  
-        - name: Enable Auto-merge
-          if: ${{ steps.findpr.outputs.pr != '' }}
-          uses: peter-evans/enable-pull-request-automerge@v3
-          with:
-            pull-request-number: ${{ steps.findpr.outputs.pr }}
-            merge-method: squash
-            token: ${{ secrets.GH_BOT_TOKEN }}
-  
-    # ========== Job C: 合并成功后删除源分支 ==========
-    delete-branch:
-      if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
-      runs-on: ubuntu-latest
-      steps:
-        - name: Install GitHub CLI
-          run: sudo apt-get install -y gh
-  
-        - name: Delete merged PR source branch
-          run: |
-            BRANCH="${{ github.event.pull_request.head.ref }}"
-            echo "Deleting merged PR source branch: $BRANCH"
-            git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
-            git push origin --delete "$BRANCH"
-          env:
-            GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
-  
+# ========== 合并后的完整工作流（使用 needs 代替 workflow_run） ==========
+# 文件路径: .github/workflows/full-release.yml
+name: Full Release - Version Bump → PR → Auto-merge → Delete Branch
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+
+  # ========== Job A: 创建版本 PR ==========
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract and clean version
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          CLEAN_VERSION=$(echo "$VERSION" | sed 's/-.*//')
+          echo "original=$VERSION" >> $GITHUB_OUTPUT
+          echo "clean=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update version in package.json
+        run: |
+          jq --arg version "${{ steps.version.outputs.clean }}" '.version = $version' package.json > tmp.json && mv tmp.json package.json
+
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to v${{ steps.version.outputs.clean }}"
+          branch: "release/auto-bump-v${{ steps.version.outputs.clean }}"
+          title: "Release: v${{ steps.version.outputs.clean }}"
+          body: "This PR updates the version from `${{ steps.version.outputs.original }}` to `${{ steps.version.outputs.clean }}`"
+          base: main
+
+  # ========== Job B: 审批 + Auto-merge ==========
+  approve-and-merge:
+    needs: create-pr
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch PR number
+        id: findpr
+        run: |
+          PR_NUMBER=$(gh pr list --state open --json number,title --jq ".[] | select(.title | test(\"Release: v[0-9]+\\\\.[0-9]+\\\\.[0-9]+\")) | .number")
+          echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+
+      - name: Auto approve PR
+        if: ${{ steps.findpr.outputs.pr != '' }}
+        run: gh pr review ${{ steps.findpr.outputs.pr }} --approve
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+
+      - name: Enable Auto-merge
+        if: ${{ steps.findpr.outputs.pr != '' }}
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          pull-request-number: ${{ steps.findpr.outputs.pr }}
+          merge-method: squash
+          token: ${{ secrets.GH_BOT_TOKEN }}
+
+  # ========== Job C: 合并成功后删除源分支 ==========
+  delete-branch:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh
+
+      - name: Delete merged PR source branch
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          echo "Deleting merged PR source branch: $BRANCH"
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
+          git push origin --delete "$BRANCH"
+        env:
+          GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
