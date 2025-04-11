@@ -33,8 +33,8 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: bump version to v${{ steps.version.outputs.clean }}"
-          branch: "release/auto-bump-v${{ steps.version.outputs.clean }}"
+          commit-message: "chore: bump version to ${{ steps.version.outputs.clean }}"
+          branch: "release/auto-bump-${{ steps.version.outputs.clean }}"
           title: "Release: ${{ steps.version.outputs.clean }}"
           body: "This PR updates the version from `${{ steps.version.outputs.original }}` to `${{ steps.version.outputs.clean }}`"
           base: main
@@ -50,14 +50,14 @@ jobs:
       - name: Auto approve PR
         run: |
           VERSION=${{ needs.create-pr.outputs.version }}
-          PR_NUMBER=$(gh pr list --state open --head release/auto-bump-v$VERSION --json number --jq '.[0].number')
+          PR_NUMBER=$(gh pr list --state open --head release/auto-bump-$VERSION --json number --jq '.[0].number')
           echo "PR number: $PR_NUMBER"
           gh pr review "$PR_NUMBER" --approve
 
       - name: Enable Auto-merge
         run: |
           VERSION=${{ needs.create-pr.outputs.version }}
-          PR_NUMBER=$(gh pr list --state open --head release/auto-bump-v$VERSION --json number --jq '.[0].number')
+          PR_NUMBER=$(gh pr list --state open --head release/auto-bump-$VERSION --json number --jq '.[0].number')
           gh pr merge "$PR_NUMBER" --auto --squash
         env:
           GH_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
@@ -74,7 +74,7 @@ jobs:
         id: pr
         run: |
           VERSION=${{ needs.create-pr.outputs.version }}
-          BRANCH="release/auto-bump-v$VERSION"
+          BRANCH="release/auto-bump-$VERSION"
           echo "Deleting merged branch: $BRANCH"
 
           # 检查是否已经 merged
