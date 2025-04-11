@@ -20,6 +20,7 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main:main
           git checkout main
           git add .
           git commit -m "Auto update by GitHub Action"
