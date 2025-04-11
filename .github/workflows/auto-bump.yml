@@ -13,17 +13,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Simulate version bump
+      # 🔍 读取并清洗版本号
+      - name: Extract and clean version
+        id: version
         run: |
-          echo "v1.0.0" > version.txt
+          VERSION=$(jq -r '.version' package.json)
+          CLEAN_VERSION=$(echo "$VERSION" | sed 's/-.*//')
+          echo "original=$VERSION" >> $GITHUB_OUTPUT
+          echo "clean=$CLEAN_VERSION" >> $GITHUB_OUTPUT
 
+      # ✏️ 替换为正式版本
+      - name: Update version in package.json
+        run: |
+          jq --arg version "${{ steps.version.outputs.clean }}" '.version = $version' package.json > tmp.json && mv tmp.json package.json
+
+      # ✅ 创建 PR
       - name: Create Pull Request
         id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: bump version to v1.0.0"
-          branch: "release/auto-bump-v1.0.0"
-          title: "Release: v1.0.0"
-          body: "This PR bumps the version to v1.0.0 for production release."
+          commit-message: "chore: bump version to v${{ steps.version.outputs.clean }}"
+          branch: "release/auto-bump-v${{ steps.version.outputs.clean }}"
+          title: "Release: v${{ steps.version.outputs.clean }}"
+          body: "This PR updates the version from `${{ steps.version.outputs.original }}` to `${{ steps.version.outputs.clean }}`"
           base: main
