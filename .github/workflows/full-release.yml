@@ -1,15 +1,14 @@
 ---
   # ========== 合并后的完整工作流 ==========
   # 文件路径: .github/workflows/full-release.yml
-  name: "Full Release: Version Bump → PR → Auto-merge → Delete Branch"
-  
+  name: Full Release - Version Bump → PR → Auto-merge → Delete Branch  
   on:
     push:
       branches:
         - main
   
     workflow_run:
-      workflows: ["Full Release: Version Bump → PR → Auto-merge → Delete Branch"]
+      workflows: ["Full Release - Version Bump → PR → Auto-merge → Delete Branch"]
       types:
         - completed
   
